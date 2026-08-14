@@ -7,31 +7,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc python3-dev libc6-dev git curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# نصب bun برای ساخت فرانت‌اند داشبورد (خود ایمیج رسمی این کار را در CI انجام می‌دهد،
-# ولی چون از سورس تازه کلون می‌کنیم باید اینجا خودمان انجامش دهیم)
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:$PATH"
 
 WORKDIR /build
 RUN git clone --depth 1 https://github.com/PasarGuard/panel.git .
 
-# ساخت خروجی استاتیک داشبورد؛ اگر این پوشه از قبل وجود نداشته باشد،
-# خود برنامه هنگام استارت runtime سعی می‌کند با bun بسازدش که در ایمیج نهایی
-# bun نصب نیست و باعث کرش می‌شود (FileNotFoundError: bun)
 RUN cd dashboard && bun install --frozen-lockfile && cd .. && bash build_dashboard.sh
 
-# پچ ۱: باگ فعلی برنچ main پاسارگارد -- سینتکس پایتون ۲ که در پایتون ۳ SyntaxError می‌دهد
-# و باعث می‌شود کل main.py اصلاً اجرا نشود (کرش کامل هنگام استارت).
 RUN sed -i 's/except ValueError, socket.gaierror:/except (ValueError, socket.gaierror):/' main.py
 
-# پچ ۲: بدون SSL، پاسارگارد به‌صورت پیش‌فرض روی localhost گوش می‌دهد که در Railway
-# باعث "Application failed to respond" می‌شود؛ این پچ همیشه 0.0.0.0 را اجباری می‌کند.
 RUN sed -i 's/bind_args\["host"\] = ip/bind_args["host"] = server_settings.host/' main.py
-
-# پچ ۳: تبدیل line ending فایل start.sh (که از ریپازیتوری اصلی کلون شده) از
-# CRLF به LF، تا shebang آن زیر بش/env درست تفسیر شود (خطای رایج:
-# "/usr/bin/env: 'bash\r': No such file or directory").
-RUN sed -i 's/\r$//' start.sh
 
 RUN uv sync --frozen --no-dev
 
@@ -44,18 +30,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY start-railway.sh /start-railway.sh
-
-# همان پچ CRLF را برای start-railway.sh هم اعمال می‌کنیم، مستقل از این‌که
-# چه line ending‌ای در مبدأ (گیت‌هاب) داشته باشد.
-RUN sed -i 's/\r$//' /start-railway.sh \
+RUN sed -i 's/\r$//' /start-railway.sh /code/start.sh \
     && chmod +x /start-railway.sh /code/start.sh
 
-# دانلود قالب رسمی صفحه‌ی ساب (subscription-template) در زمان build
 RUN mkdir -p /code/templates/subscription && \
     curl -fsSL -o /code/templates/subscription/index.html \
     https://github.com/PasarGuard/subscription-template/releases/latest/download/index.html
-# این خط به Railway می‌گوید پنل روی کدام پورت گوش می‌دهد تا موقع ساخت
-# دامنه، پورت درست را خودش به‌صورت خودکار تشخیص دهد.
+
 EXPOSE 8000
 
 ENTRYPOINT ["/start-railway.sh"]
