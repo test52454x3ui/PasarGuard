@@ -28,6 +28,11 @@ RUN sed -i 's/except ValueError, socket.gaierror:/except (ValueError, socket.gai
 # باعث "Application failed to respond" می‌شود؛ این پچ همیشه 0.0.0.0 را اجباری می‌کند.
 RUN sed -i 's/bind_args\["host"\] = ip/bind_args["host"] = server_settings.host/' main.py
 
+# پچ ۳: تبدیل line ending فایل start.sh (که از ریپازیتوری اصلی کلون شده) از
+# CRLF به LF، تا shebang آن زیر بش/env درست تفسیر شود (خطای رایج:
+# "/usr/bin/env: 'bash\r': No such file or directory").
+RUN sed -i 's/\r$//' start.sh
+
 RUN uv sync --frozen --no-dev
 
 FROM python:$PYTHON_VERSION-slim-bookworm
@@ -39,7 +44,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY start-railway.sh /start-railway.sh
-RUN chmod +x /start-railway.sh /code/start.sh
+
+# همان پچ CRLF را برای start-railway.sh هم اعمال می‌کنیم، مستقل از این‌که
+# چه line ending‌ای در مبدأ (گیت‌هاب) داشته باشد.
+RUN sed -i 's/\r$//' /start-railway.sh \
+    && chmod +x /start-railway.sh /code/start.sh
+
 # دانلود قالب رسمی صفحه‌ی ساب (subscription-template) در زمان build
 RUN mkdir -p /code/templates/subscription && \
     curl -fsSL -o /code/templates/subscription/index.html \
